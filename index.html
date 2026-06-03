@@ -13,7 +13,7 @@ h1 { font-size: 18px; color: #c9a227; letter-spacing: 1px; margin-bottom: 4px; t
 .timer span { color: #c9a227; font-weight: bold; }
 button { background: #21262d; color: #e6edf3; border: 1px solid #30363d; border-radius: 6px; padding: 5px 12px; font-size: 12px; cursor: pointer; }
 button:hover { background: #30363d; }
-.status { font-size: 11px; color: #8b949e; min-width: 120px; text-align: center; }
+.status { font-size: 11px; color: #8b949e; min-width: 200px; text-align: center; }
 table { border-collapse: collapse; width: 560px; background: #161b22; border-radius: 8px; overflow: hidden; border: 1px solid #30363d; }
 thead tr { background: #1c2128; }
 th { padding: 8px 10px; text-align: left; font-size: 11px; color: #8b949e; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid #30363d; }
@@ -31,7 +31,7 @@ tr:hover td { background: #1c2128; }
 .tier-B { background: #d4a017; color: #000; }
 .tier-C { background: #2ea043; color: #fff; }
 .type-badge { font-size: 10px; padding: 1px 5px; border-radius: 3px; background: #30363d; color: #8b949e; }
-.error-msg { color: #f85149; padding: 20px; text-align: center; }
+.error-msg { color: #f85149; padding: 20px; text-align: center; line-height: 1.8; }
 .loading-msg { color: #8b949e; padding: 20px; text-align: center; }
 </style>
 </head>
@@ -49,39 +49,61 @@ var LEAGUE='Runes+of+Aldur',THRESHOLD_EX=50,REFRESH_MS=1800000;
 var DIV_ICON='https://web.poecdn.com/gen/image/WzI1LDE0LHsiZiI6IjJESXRlbXMvQ3VycmVuY3kvQ3VycmVuY3lNb2RWYWx1ZXMiLCJ3IjoxLCJoIjoxLCJzY2FsZSI6MX1d/e1a54ff97d/CurrencyModValues.png';
 var EX_ICON='https://web.poecdn.com/gen/image/WzI1LDE0LHsiZiI6IjJESXRlbXMvQ3VycmVuY3kvQ3VycmVuY3lBZGRNb2RUb1JhcmUiLCJ3IjoxLCJoIjoxLCJzY2FsZSI6MX1d/d119a0d734/CurrencyAddModToRare.png';
 var refreshTimer=null,countdownTimer=null,countdownSec=1800;
+// corsproxy.io first (works from github.io), allorigins as fallback
+var PROXIES=['https://corsproxy.io/?url=','https://api.allorigins.win/raw?url=','https://thingproxy.freeboard.io/fetch/'];
 function pad(n){return n<10?'0'+n:''+n;}
 function startCountdown(){clearInterval(countdownTimer);countdownSec=1800;countdownTimer=setInterval(function(){countdownSec--;if(countdownSec<0)countdownSec=0;var el=document.getElementById('countdown');if(el)el.textContent=pad(Math.floor(countdownSec/60))+':'+pad(countdownSec%60);},1000);}
-function fetchWithProxy(url){
-  var proxies=['https://api.allorigins.win/raw?url=','https://corsproxy.io/?url='];
-  function tryProxy(i){
-    if(i>=proxies.length)return Promise.reject(new Error('All proxies failed'));
-    return fetch(proxies[i]+encodeURIComponent(url)).then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json();}).catch(function(e){return tryProxy(i+1);});
-  }
-  return tryProxy(0);
+function fetchWithProxy(url,proxyIdx){
+  if(proxyIdx===undefined)proxyIdx=0;
+  if(proxyIdx>=PROXIES.length)return Promise.reject(new Error('All proxies failed for '+url));
+  return fetch(PROXIES[proxyIdx]+encodeURIComponent(url))
+    .then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json();})
+    .catch(function(e){
+      console.warn('Proxy '+proxyIdx+' failed:',e.message);
+      return fetchWithProxy(url,proxyIdx+1);
+    });
 }
 function fetchCategory(type){return fetchWithProxy('https://poe.ninja/poe2/api/economy/exchange/current/overview?league='+LEAGUE+'&type='+type);}
 function getTier(ex){if(ex>=1000)return'S';if(ex>=500)return'A';if(ex>=75)return'B';return'C';}
-function mergeItems(data,cat,divRate){var itemMap={};(data.items||[]).forEach(function(it){itemMap[it.name]=it;});return(data.lines||[]).map(function(line){var it=itemMap[line.currencyTypeName]||{};return{name:line.currencyTypeName,primaryValue:line.primaryValue,image:it.image||null,category:cat};}).filter(function(item){return item.primaryValue*divRate>=THRESHOLD_EX;});}
-function buildRow(item,divRate){var exVal=item.primaryValue*divRate,divVal=item.primaryValue,tier=getTier(exVal);var imgSrc=item.image?('https://web.poecdn.com'+item.image):'';var imgTag=imgSrc?'<img class="item-img" src="'+imgSrc+'" onerror="this.style.display='none'">':'';return'<tr><td><div class="item-name">'+imgTag+'<span>'+item.name+'</span></div></td><td><span class="type-badge">'+item.category+'</span></td><td><div class="val-cell"><img class="currency-icon" src="'+EX_ICON+'">'+Math.round(exVal)+'</div></td><td><div class="val-cell"><img class="currency-icon" src="'+DIV_ICON+'">'+divVal.toFixed(2)+'</div></td><td style="text-align:center"><span class="tier tier-'+tier+'">'+tier+'</span></td></tr>';}
+function mergeItems(data,cat,divRate){
+  var itemMap={};
+  (data.items||[]).forEach(function(it){itemMap[it.name]=it;});
+  return(data.lines||[]).map(function(line){
+    var it=itemMap[line.currencyTypeName]||{};
+    return{name:line.currencyTypeName,primaryValue:line.primaryValue,image:it.image||null,category:cat};
+  }).filter(function(item){return item.primaryValue*divRate>=THRESHOLD_EX;});
+}
+function buildRow(item,divRate){
+  var exVal=item.primaryValue*divRate,divVal=item.primaryValue,tier=getTier(exVal);
+  var imgSrc=item.image?('https://web.poecdn.com'+item.image):'';
+  var imgTag=imgSrc?'<img class="item-img" src="'+imgSrc+'" onerror="this.style.display='none'">':'';
+  return'<tr><td><div class="item-name">'+imgTag+'<span>'+item.name+'</span></div></td>'+
+    '<td><span class="type-badge">'+item.category+'</span></td>'+
+    '<td><div class="val-cell"><img class="currency-icon" src="'+EX_ICON+'">'+Math.round(exVal)+'</div></td>'+
+    '<td><div class="val-cell"><img class="currency-icon" src="'+DIV_ICON+'">'+divVal.toFixed(2)+'</div></td>'+
+    '<td style="text-align:center"><span class="tier tier-'+tier+'">'+tier+'</span></td></tr>';
+}
 function doRefresh(){
   var statusEl=document.getElementById('status'),containerEl=document.getElementById('table-container');
   if(statusEl)statusEl.textContent='Loading...';clearTimeout(refreshTimer);
-  fetchCategory('Runes').then(function(r){return fetchCategory('Verisium').then(function(v){return fetchCategory('Expedition').then(function(e){return[r,v,e];});});})
-  .then(function(results){
-    var r=results[0],v=results[1],e=results[2];
-    var divRate=(e.core&&e.core.rates&&e.core.rates.exalted)?e.core.rates.exalted:(r.core&&r.core.rates&&r.core.rates.exalted)?r.core.rates.exalted:75;
-    var allItems=[].concat(mergeItems(r,'Rune',divRate),mergeItems(v,'Verisium',divRate),mergeItems(e,'Expedition',divRate));
-    allItems.sort(function(a,b){return b.primaryValue*divRate-a.primaryValue*divRate;});
-    var now=new Date().toLocaleTimeString();
-    if(statusEl)statusEl.textContent='Updated '+now+' · '+allItems.length+' items · 1div='+Math.round(divRate)+'ex';
-    var rows=allItems.length?allItems.map(function(item){return buildRow(item,divRate);}).join(''):'<tr><td colspan="5" style="text-align:center;color:#8b949e">No items above '+THRESHOLD_EX+'ex</td></tr>';
-    containerEl.innerHTML='<table><thead><tr><th>Item</th><th>Type</th><th><div class="val-cell"><img class="currency-icon" src="'+EX_ICON+'">Value</div></th><th><div class="val-cell"><img class="currency-icon" src="'+DIV_ICON+'">Value</div></th><th class="center">Tier</th></tr></thead><tbody>'+rows+'</tbody></table>';
-    startCountdown();refreshTimer=setTimeout(doRefresh,REFRESH_MS);
-  }).catch(function(err){
-    if(statusEl)statusEl.textContent='Error — retry in 2min';
-    containerEl.innerHTML='<div class="error-msg">Failed to load data.<br>'+err.message+'<br><br>Try clicking Refresh Now.</div>';
-    refreshTimer=setTimeout(doRefresh,120000);
-  });
+  fetchCategory('Runes')
+    .then(function(r){return fetchCategory('Verisium').then(function(v){return fetchCategory('Expedition').then(function(e){return[r,v,e];});});})
+    .then(function(results){
+      var r=results[0],v=results[1],e=results[2];
+      var divRate=(e.core&&e.core.rates&&e.core.rates.exalted)?e.core.rates.exalted:(r.core&&r.core.rates&&r.core.rates.exalted)?r.core.rates.exalted:75;
+      var allItems=[].concat(mergeItems(r,'Rune',divRate),mergeItems(v,'Verisium',divRate),mergeItems(e,'Expedition',divRate));
+      allItems.sort(function(a,b){return b.primaryValue*divRate-a.primaryValue*divRate;});
+      var now=new Date().toLocaleTimeString();
+      if(statusEl)statusEl.textContent='Updated '+now+' · '+allItems.length+' items · 1div='+Math.round(divRate)+'ex';
+      var rows=allItems.length?allItems.map(function(item){return buildRow(item,divRate);}).join(''):'<tr><td colspan="5" style="text-align:center;color:#8b949e;padding:12px">No items above '+THRESHOLD_EX+'ex threshold</td></tr>';
+      containerEl.innerHTML='<table><thead><tr><th>Item</th><th>Type</th><th><div class="val-cell"><img class="currency-icon" src="'+EX_ICON+'">Value</div></th><th><div class="val-cell"><img class="currency-icon" src="'+DIV_ICON+'">Value</div></th><th class="center">Tier</th></tr></thead><tbody>'+rows+'</tbody></table>';
+      startCountdown();refreshTimer=setTimeout(doRefresh,REFRESH_MS);
+    })
+    .catch(function(err){
+      if(statusEl)statusEl.textContent='Error — retry in 2min';
+      containerEl.innerHTML='<div class="error-msg">Failed to load data: '+err.message+'<br>Try clicking Refresh Now.</div>';
+      refreshTimer=setTimeout(doRefresh,120000);
+    });
 }
 doRefresh();
 </script>
