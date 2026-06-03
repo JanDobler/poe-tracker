@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>50ex+ Items — Runes of Aldur</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: #0d1117; color: #e6edf3; font-family: 'Segoe UI', sans-serif; min-height: 100vh; display: flex; flex-direction: column; align-items: center; padding: 20px; }
+h1 { font-size: 18px; color: #c9a227; letter-spacing: 1px; margin-bottom: 4px; text-align: center; }
+.subtitle { font-size: 11px; color: #8b949e; margin-bottom: 12px; text-align: center; }
+.controls { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; flex-wrap: wrap; justify-content: center; }
+.timer { font-size: 12px; color: #8b949e; }
+.timer span { color: #c9a227; font-weight: bold; }
+button { background: #21262d; color: #e6edf3; border: 1px solid #30363d; border-radius: 6px; padding: 5px 12px; font-size: 12px; cursor: pointer; }
+button:hover { background: #30363d; }
+.status { font-size: 11px; color: #8b949e; min-width: 120px; text-align: center; }
+table { border-collapse: collapse; width: 560px; background: #161b22; border-radius: 8px; overflow: hidden; border: 1px solid #30363d; }
+thead tr { background: #1c2128; }
+th { padding: 8px 10px; text-align: left; font-size: 11px; color: #8b949e; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid #30363d; }
+th.center { text-align: center; }
+td { padding: 7px 10px; font-size: 13px; border-bottom: 1px solid #21262d; vertical-align: middle; }
+tr:last-child td { border-bottom: none; }
+tr:hover td { background: #1c2128; }
+.item-name { display: flex; align-items: center; gap: 8px; }
+.item-img { width: 28px; height: 28px; object-fit: contain; flex-shrink: 0; }
+.val-cell { display: flex; align-items: center; gap: 4px; white-space: nowrap; }
+.currency-icon { width: 18px; height: 18px; object-fit: contain; }
+.tier { display: inline-block; padding: 2px 7px; border-radius: 4px; font-size: 11px; font-weight: bold; text-align: center; }
+.tier-S { background: #6e40c9; color: #fff; }
+.tier-A { background: #da3633; color: #fff; }
+.tier-B { background: #d4a017; color: #000; }
+.tier-C { background: #2ea043; color: #fff; }
+.type-badge { font-size: 10px; padding: 1px 5px; border-radius: 3px; background: #30363d; color: #8b949e; }
+.error-msg { color: #f85149; padding: 20px; text-align: center; }
+.loading-msg { color: #8b949e; padding: 20px; text-align: center; }
+</style>
+</head>
+<body>
+<h1>&#x2694; POE2 &mdash; 50ex+ Items</h1>
+<div class="subtitle">Runes of Aldur League &middot; Runes &middot; Verisium &middot; Expedition</div>
+<div class="controls">
+  <button onclick="doRefresh()">&#x21BB; Refresh Now</button>
+  <div class="timer">Next refresh in: <span id="countdown">30:00</span></div>
+  <div class="status" id="status">Loading...</div>
+</div>
+<div id="table-container"><div class="loading-msg">Fetching data from poe.ninja...</div></div>
+<script>
+var LEAGUE='Runes+of+Aldur',THRESHOLD_EX=50,REFRESH_MS=1800000;
+var DIV_ICON='https://web.poecdn.com/gen/image/WzI1LDE0LHsiZiI6IjJESXRlbXMvQ3VycmVuY3kvQ3VycmVuY3lNb2RWYWx1ZXMiLCJ3IjoxLCJoIjoxLCJzY2FsZSI6MX1d/e1a54ff97d/CurrencyModValues.png';
+var EX_ICON='https://web.poecdn.com/gen/image/WzI1LDE0LHsiZiI6IjJESXRlbXMvQ3VycmVuY3kvQ3VycmVuY3lBZGRNb2RUb1JhcmUiLCJ3IjoxLCJoIjoxLCJzY2FsZSI6MX1d/d119a0d734/CurrencyAddModToRare.png';
+var refreshTimer=null,countdownTimer=null,countdownSec=1800;
+function pad(n){return n<10?'0'+n:''+n;}
+function startCountdown(){clearInterval(countdownTimer);countdownSec=1800;countdownTimer=setInterval(function(){countdownSec--;if(countdownSec<0)countdownSec=0;var el=document.getElementById('countdown');if(el)el.textContent=pad(Math.floor(countdownSec/60))+':'+pad(countdownSec%60);},1000);}
+function proxyUrl(url){return 'https://api.allorigins.win/raw?url='+encodeURIComponent(url);}
+function fetchCategory(type){var url='https://poe.ninja/poe2/api/economy/exchange/current/overview?league='+LEAGUE+'&type='+type;return fetch(proxyUrl(url)).then(function(r){if(!r.ok)throw new Error('HTTP '+r.status+' for '+type);return r.json();});}
+function getTier(ex){if(ex>=1000)return'S';if(ex>=500)return'A';if(ex>=75)return'B';return'C';}
+function mergeItems(data,cat,divRate){var itemMap={};(data.items||[]).forEach(function(it){itemMap[it.name]=it;});return(data.lines||[]).map(function(line){var it=itemMap[line.currencyTypeName]||{};return{name:line.currencyTypeName,primaryValue:line.primaryValue,image:it.image||null,category:cat};}).filter(function(item){return item.primaryValue*divRate>=THRESHOLD_EX;});}
+function buildRow(item,divRate){var exVal=item.primaryValue*divRate,divVal=item.primaryValue,tier=getTier(exVal);var imgSrc=item.image?('https://web.poecdn.com'+item.image):'';var imgTag=imgSrc?'<img class="item-img" src="'+imgSrc+'" onerror="this.style.display:none">':'';return'<tr><td><div class="item-name">'+imgTag+'<span>'+item.name+'</span></div></td><td><span class="type-badge">'+item.category+'</span></td><td><div class="val-cell"><img class="currency-icon" src="'+EX_ICON+'">'+Math.round(exVal)+'</div></td><td><div class="val-cell"><img class="currency-icon" src="'+DIV_ICON+'">'+divVal.toFixed(2)+'</div></td><td style="text-align:center"><span class="tier tier-'+tier+'">'+tier+'</span></td></tr>';}
+function doRefresh(){var statusEl=document.getElementById('status'),containerEl=document.getElementById('table-container');if(statusEl)statusEl.textContent='Loading...';clearTimeout(refreshTimer);Promise.all([fetchCategory('Runes'),fetchCategory('Verisium'),fetchCategory('Expedition')]).then(function(results){var r=results[0],v=results[1],e=results[2];var divRate=(e.core&&e.core.rates&&e.core.rates.exalted)?e.core.rates.exalted:(r.core&&r.core.rates&&r.core.rates.exalted)?r.core.rates.exalted:75;var allItems=[].concat(mergeItems(r,'Rune',divRate),mergeItems(v,'Verisium',divRate),mergeItems(e,'Expedition',divRate));allItems.sort(function(a,b){return b.primaryValue*divRate-a.primaryValue*divRate;});var now=new Date().toLocaleTimeString();if(statusEl)statusEl.textContent='Updated '+now+' · '+allItems.length+' items · 1 div = '+Math.round(divRate)+'ex';var rows=allItems.map(function(item){return buildRow(item,divRate);}).join('');containerEl.innerHTML='<table><thead><tr><th>Item</th><th>Type</th><th><div class="val-cell"><img class="currency-icon" src="'+EX_ICON+'">Value</div></th><th><div class="val-cell"><img class="currency-icon" src="'+DIV_ICON+'">Value</div></th><th class="center">Tier</th></tr></thead><tbody>'+rows+'</tbody></table>';startCountdown();refreshTimer=setTimeout(doRefresh,REFRESH_MS);}).catch(function(err){if(statusEl)statusEl.textContent='Error: '+err.message;containerEl.innerHTML='<div class="error-msg">Failed to load: '+err.message+'</div>';refreshTimer=setTimeout(doRefresh,60000);});}
+doRefresh();
+</script>
+</body>
+</html>
